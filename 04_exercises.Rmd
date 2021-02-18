@@ -392,7 +392,26 @@ covid19 %>%
   12. Now add the population of each state to the dataset and color the states by most recent cumulative cases/10,000 people. See the code for doing this with the Starbucks data. You will need to make some modifications. 
   
 ```{r}
+states_map <- map_data("state")
 
+options(scipen = 10000)
+
+covid19 %>% 
+  mutate(state = str_to_lower(state)) %>% 
+  group_by(state) %>% 
+  summarize(current_case_count = max(cases)) %>% 
+  left_join(census_pop_est_2018,
+            by = c("state" = "state")) %>% 
+  mutate(per_10000 = (current_case_count/est_pop_2018)*10000) %>% 
+  ggplot() + 
+  geom_map(map = states_map,
+           aes(map_id = state,
+               fill = per_10000)) + 
+  labs(title = "Number of Current Covid Cases by State Per 10000 People") + 
+  expand_limits(x = states_map$long, y = states_map$lat)+
+  theme_map() + 
+  theme(legend.background = element_blank()) + 
+  scale_fill_gradient(low = "blue", high = "red", name = "Case Count")
 ```
 
   
@@ -404,19 +423,107 @@ These exercises use the datasets `MplsStops` and `MplsDemo` from the `carData` l
 
   14. Use the `MplsStops` dataset to find out how many stops there were for each neighborhood and the proportion of stops that were for a suspicious vehicle or person. Sort the results from most to least number of stops. Save this as a dataset called `mpls_suspicious` and display the table.  
   
+```{r}
+
+  
+mpls_suspicious <- MplsStops %>% 
+  group_by(neighborhood) %>% 
+  summarize(total_stops = n(),
+            total_suspicious = (sum(problem == "suspicious")),
+            prop = (total_suspicious/total_stops)) %>% 
+  arrange(desc(total_stops))
+
+mpls_suspicious
+
+```
+
+  
   15. Use a `leaflet` map and the `MplsStops` dataset to display each of the stops on a map as a small point. Color the points differently depending on whether they were for suspicious vehicle/person or a traffic stop (the `problem` variable). HINTS: use `addCircleMarkers`, set `stroke = FAlSE`, use `colorFactor()` to create a palette.  
+  
+```{r}
+pal_suspicious_or_traffic <- colorFactor(c("red", "blue"),
+                                         domain = MplsStops$problem)
+
+leaflet(MplsStops) %>% 
+  addProviderTiles(providers$Stamen.TonerHybrid) %>% 
+  addCircleMarkers(radius = 2,
+                   lng = ~long,
+                   lat = ~lat,
+                   label = ~problem,
+                   color = ~pal_suspicious_or_traffic(problem),
+                   stroke = FALSE)
+
+
+```
+
   
   16. Save the folder from moodle called Minneapolis_Neighborhoods into your project/repository folder for this assignment. Make sure the folder is called Minneapolis_Neighborhoods. Use the code below to read in the data and make sure to **delete the `eval=FALSE`**. Although it looks like it only links to the .sph file, you need the entire folder of files to create the `mpls_nbhd` data set. These data contain information about the geometries of the Minneapolis neighborhoods. Using the `mpls_nbhd` dataset as the base file, join the `mpls_suspicious` and `MplsDemo` datasets to it by neighborhood (careful, they are named different things in the different files). Call this new dataset `mpls_all`.
 
-```{r, eval=FALSE}
+```{r}
 mpls_nbhd <- st_read("Minneapolis_Neighborhoods/Minneapolis_Neighborhoods.shp", quiet = TRUE)
+
+mpls_1st_join <- mpls_nbhd %>% 
+  left_join(MplsDemo,
+            by = c("BDNAME" = "neighborhood")) 
+
+mpls_all <- mpls_1st_join %>% 
+  left_join(mpls_suspicious,
+            by = c("BDNAME" = "neighborhood"))
+
+
 ```
 
   17. Use `leaflet` to create a map from the `mpls_all` data  that colors the neighborhoods by `prop_suspicious`. Display the neighborhood name as you scroll over it. Describe what you observe in the map.
+
+```{r}
+pal_all <- colorNumeric("viridis",
+                        domain = mpls_all$prop)
+
+ 
+leaflet(mpls_all) %>% 
+  addTiles() %>%  
+  addPolygons(stroke = FALSE,
+              fillColor = ~pal_all(prop),
+              fillOpacity = .6,
+              label = ~BDNAME,
+              highlight = highlightOptions(color = "black",
+                                           fillOpacity = .9,
+                                           bringToFront = FALSE))  %>% 
+  addLegend(position = "topleft",
+            pal = pal_all,
+            values = ~prop)
+  
+
+```
+
+
+The highest proportion of "suspicious" problems occurred in neighborhoods southeast of Minneapolis. The neighborhoods north of Minneapolis have a much lower rate of "suspicious" police stops. 
   
   18. Use `leaflet` to create a map of your own choosing. Come up with a question you want to try to answer and use the map to help answer that question. Describe what your map shows. 
   
-  
+Is their a correlation between "suspicious" police stops and poverty of that neighborhood? 
+
+```{r}
+pal_poverty <- colorNumeric("viridis",
+                          domain = mpls_all$poverty)
+
+leaflet(mpls_all) %>% 
+  addTiles() %>% 
+  addPolygons(stroke = FALSE,
+              fillColor = ~pal_poverty(poverty),
+              fillOpacity = .6,
+              label = ~BDNAME,
+              highlight = highlightOptions(color = "black",
+                                           fillOpacity = .9,
+                                           bringToFront = FALSE))  %>% 
+  addLegend(position = "topleft",
+            pal = pal_poverty,
+            values = ~poverty)
+ 
+```
+
+We saw in problem 17 that the neighborhoods located southeast of Minneapolis, but there seems to be no correlation between this and the neighborhoods with the highest amount of poverty. 
+
 ## GitHub link
 
   19. Below, provide a link to your GitHub page with this set of Weekly Exercises. Specifically, if the name of the file is 04_exercises.Rmd, provide a link to the 04_exercises.md file, which is the one that will be most readable on GitHub.
